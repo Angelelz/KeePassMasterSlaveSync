@@ -24,18 +24,18 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 
 | Setting                                                   | Description                                                             | Optional                                   | Example                                 |
 | --------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------- |
-| `Title`                                                   | Name of the job                                                         | No                                         | `MasterSlaveSync_MobilePhone`           |
-| `Password`                                                | The password for the target database                                    | Yes, if `MasterSlaveSync_KeyFilePath` is set  | `SecurePW!`                             |
+| `Title`                                                   | Name of the job                                                         | No                                         | `MSS_MobilePhone`           |
+| `Password`                                                | The password for the target database                                    | Yes, if `MSS_KeyFilePath` is set  | `SecurePW!`                             |
 | `Expires`                                                 | If the entry expires the job is disabled and won't be executed          | `-`                                        | `-`                                     |
-| `MasterSlaveSync_KeyFilePath`<br>[string field]           | Path to a key file                                                      | Yes, if `Password` is set                  | `C:\keys\mobile.key`                    |
-| `MasterSlaveSync_TargetFilePath`<br>[string field]        | Path to the target database.<br>(Absolute, or relative to source database parent folder.) | No                       | `C:\sync\mobile.kdbx`<br>or<br>`mobile.kdbx`<br>or<br>`..\mobile.kdbx` |
-| `MasterSlaveSync_Group`<br>[string field]                 | Group(s) for filtering (`,` to delimit multiple groups - `,` is not allowed in group names)| Yes, if `MasterSlaveSync_Tag` is set          | `MobileGroup`                           |
-| `MasterSlaveSync_Tag`<br>[string field]                   | Tag(s) for filtering (`,` to delimit multiple tags - `,` is not allowed in tag names)| Yes, if `MasterSlaveSync_Group` is set        | `MobileSync`                            |
-| `MasterSlaveSync_ExportUserAndPassOnly`<br>[string field]    | If `True` Only the Title, Url, Username and Password will be synced with the target Database. | Yes (defaults to `False`) | `True`                             |
-| `MasterSlaveSync_PerformSlaveJobs`<br>[string field]    | If true, Sync jobs on target database will be executed too. | Yes (defaults to `True`) | `True`                             |
+| `MSS_KeyFilePath`<br>[string field]           | Path to a key file                                                      | Yes, if `Password` is set                  | `C:\keys\mobile.key`                    |
+| `MSS_TargetFilePath`<br>[string field]        | Path to the target database.<br>(Absolute, or relative to source database parent folder.) | No                       | `C:\sync\mobile.kdbx`<br>or<br>`mobile.kdbx`<br>or<br>`..\mobile.kdbx` |
+| `MSS_Group`<br>[string field]                 | Group(s) for filtering (`,` to delimit multiple groups - `,` is not allowed in group names)| Yes, if `MSS_Tag` is set          | `MobileGroup`                           |
+| `MSS_Tag`<br>[string field]                   | Tag(s) for filtering (`,` to delimit multiple tags - `,` is not allowed in tag names)| Yes, if `MSS_Group` is set        | `MobileSync`                            |
+| `MSS_ExportUserAndPassOnly`<br>[string field]    | If `True` Only the Title, Url, Username and Password will be synced with the target Database. | Yes (defaults to `False`) | `True`                             |
+| `MSS_PerformSlaveJobs`<br>[string field]    | If true, Sync jobs on target database will be executed too. | Yes (defaults to `True`) | `True`                             |
 
 - Every time the (Master) database is saved, every configured sync job will be executed
 - To disable an export job temporarily just set it to expire, it does not matter the time
-- If both `MasterSlaveSync_Group` and `MasterSlaveSync_Tag` are set, only entries matching *both* will be exported
+- If both `MSS_Group` and `MSS_Tag` are set, only entries matching *both* will be exported
 
 ![create](https://raw.githubusercontent.com/Angelelz/KeePassMasterSlaveSync/master/KeePassMasterSlaveSync/Capture/CaptureMSS.png)
