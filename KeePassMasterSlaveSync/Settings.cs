@@ -61,13 +61,13 @@ namespace KeePassMasterSlaveSync
             {
                 //Password = settingsEntry.Strings.GetSafe("Password"),
                 Password = GetFieldWRef(settingsEntry, sourceDb, PwDefs.PasswordField),
-                TargetFilePath = settingsEntry.Strings.ReadSafe("MasterSlaveSync_TargetFilePath"),
-                KeyFilePath = settingsEntry.Strings.ReadSafe("MasterSlaveSync_KeyFilePath"),
-                Group = settingsEntry.Strings.ReadSafe("MasterSlaveSync_Group"),
-                Tag = settingsEntry.Strings.ReadSafe("MasterSlaveSync_Tag"),
+                TargetFilePath = settingsEntry.Strings.ReadSafe("MSS_TargetFilePath"),
+                KeyFilePath = settingsEntry.Strings.ReadSafe("MSS_KeyFilePath"),
+                Group = settingsEntry.Strings.ReadSafe("MSS_Group"),
+                Tag = settingsEntry.Strings.ReadSafe("MSS_Tag"),
                 Disabled = (settingsEntry.Expires),
-                ExportUserAndPassOnly = settingsEntry.Strings.ReadSafe("MasterSlaveSync_ExportUserAndPassOnly").ToLower().Trim() == "true",
-                PerformSlaveJobs = settingsEntry.Strings.ReadSafe("MasterSlaveSync_PerformSlaveJobs").ToLower().Trim() != "false"
+                ExportUserAndPassOnly = settingsEntry.Strings.ReadSafe("MSS_ExportUserAndPassOnly").ToLower().Trim() == "true",
+                PerformSlaveJobs = settingsEntry.Strings.ReadSafe("MSS_PerformSlaveJobs").ToLower().Trim() != "false"
             };
         }
 
