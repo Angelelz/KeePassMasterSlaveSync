@@ -3,7 +3,7 @@ KeePassMasterSlaveSync is a KeePass 2 plugin that Allows synchronization of spec
 This plugin is heavily based on [KeePassSubsetExport.](https://github.com/lukeIam/KeePassSubsetExport)
 
 ## Why?
-Automatically and securely share entries and gruops with other databases. I have my personal database from which I share a group containing bank and family entries with my wife's database.
+Automatically and securely share entries and groups with other databases. I have my personal database from which I share a group containing bank and family entries with my wife's database.
 My Database act as a Master for those entries: If I delete or move any entry, It will be deleted from the Slave; but if there is different data in any entry, the one with the newer modification time will be synced across both databases.
 Also, my wife's database (slave Database) can have entries to share too, for which it will be the master.
 
