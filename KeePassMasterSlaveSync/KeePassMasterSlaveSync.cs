@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Drawing;
 using System.Threading.Tasks;
 using KeePass.Plugins;
 using KeePass.Forms;
@@ -11,6 +12,16 @@ namespace KeePassMasterSlaveSync
     public class KeePassMasterSlaveSyncExt : Plugin
     {
         private IPluginHost m_host = null;
+
+        public override Image SmallIcon
+        {
+            get { return Resources.Icon16x16; }
+        }
+
+        public override string UpdateUrl
+        {
+            get { return "https://github.com/Angelelz/KeePassMasterSlaveSync/raw/master/keepass.version"; }
+        }
 
         public override bool Initialize(IPluginHost host)
         {
