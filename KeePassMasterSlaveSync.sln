@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.757
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeePassMasterSlaveSync", "KeePassMasterSlaveSync\KeePassMasterSlaveSync.csproj", "{73EB83B3-B68B-46F6-85F7-DF5E81F36824}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{73EB83B3-B68B-46F6-85F7-DF5E81F36824}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73EB83B3-B68B-46F6-85F7-DF5E81F36824}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73EB83B3-B68B-46F6-85F7-DF5E81F36824}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73EB83B3-B68B-46F6-85F7-DF5E81F36824}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {61D8229E-D33E-4A9C-A4A5-48092CF19941}
+	EndGlobalSection
+EndGlobal
