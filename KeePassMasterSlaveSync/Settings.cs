@@ -1,7 +1,5 @@
-﻿using System;
-using KeePassLib;
+﻿using KeePassLib;
 using KeePassLib.Security;
-using KeePassLib.Utility;
 using KeePass.Util.Spr;
 
 namespace KeePassMasterSlaveSync

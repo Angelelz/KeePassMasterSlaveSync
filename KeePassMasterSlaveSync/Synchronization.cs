@@ -2,17 +2,12 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using KeePass;
-using KeePass.Plugins;
-using KeePass.Forms;
 using KeePassLib;
 using KeePassLib.Collections;
 using KeePassLib.Keys;
 using KeePassLib.Utility;
 using KeePassLib.Serialization;
-using KeePassLib.Interfaces;
 using KeePassLib.Security;
 
 namespace KeePassMasterSlaveSync
@@ -74,7 +69,7 @@ namespace KeePassMasterSlaveSync
                 try
                 {
                 // Execute the export 
-                    SyncToDb(sourceDb, settings);
+                SyncToDb(sourceDb, settings);
                 }
                 catch (Exception e)
                 {
@@ -83,13 +78,13 @@ namespace KeePassMasterSlaveSync
                 Program.MainForm.Refresh();
             }
 
-            
+
             //Start Synchronization from slaves
             for (int i = 0; i < slavesPaths.Count; ++i)
             {
                 if (!slavesCheck[0])
                 {
-                    
+
                     // Create a key for the target database
                     CompositeKey key = CreateCompositeKey(slavesPass[i], slavesKeys[i]);
 
@@ -278,7 +273,7 @@ namespace KeePassMasterSlaveSync
         {
             // Create a new database 
             PwDatabase targetDatabase = new PwDatabase();
-            
+
             // Connect the database object to the existing database
             targetDatabase.Open(new IOConnectionInfo()
             {
@@ -429,7 +424,7 @@ namespace KeePassMasterSlaveSync
 
                 PwEntry peNew = targetGroup.FindEntry(entry.Uuid, bSearchRecursive: false);
 
-                
+
 
                 // Check if the target entry is newer than the source entry  && peNew.LastModificationTime > entry.LastModificationTime
                 if (peNew != null && peNew.LastModificationTime.CompareTo(entry.LastModificationTime) > 0)
@@ -447,7 +442,7 @@ namespace KeePassMasterSlaveSync
                     PwEntry repEntry = recycleBin.FindEntry(entry.Uuid, true);
                     if (repEntry != null)
                     {
-                        repEntry.SetUuid(new PwUuid(true),false);
+                        repEntry.SetUuid(new PwUuid(true), false);
                     }
                 }
 
@@ -542,11 +537,9 @@ namespace KeePassMasterSlaveSync
             // This is neccesary to support field refferences. Maybe notes field too?
             string[] fieldNames = { PwDefs.TitleField , PwDefs.UserNameField ,
                 PwDefs.PasswordField, PwDefs.UrlField };
+
             foreach (string fieldName in fieldNames)
-            {
-                var ps = Settings.GetFieldWRef(sourceEntry, sourceDb, fieldName);
-                targetEntry.Strings.Set(fieldName, ps);
-            }
+                targetEntry.Strings.Set(fieldName, Settings.GetFieldWRef(sourceEntry, sourceDb, fieldName));
 
             // Handle custom icon
             HandleCustomIcon(targetDb, sourceDb, sourceEntry);
@@ -554,17 +547,9 @@ namespace KeePassMasterSlaveSync
 
         private static void DeleteExtraEntries(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList, PwDatabase targetDb)
         {
-            var toDelete = new PwObjectList<PwEntry>();
-            foreach (PwEntry slaveEntry in slaveList)
-            {
-                // I have to do it this way since masterList.Contains(slaveEntry) does not work
-                bool del = false;
-
-                foreach (PwEntry masterEntry in masterList)
-                    if (slaveEntry.Uuid.Equals(masterEntry.Uuid)) del = true;
-
-                if (!del) toDelete.Add(slaveEntry);
-            }
+            //Find entries in slaveList not in masterList to delete
+            IEnumerable<PwUuid> masterUuid = masterList.Select(x => x.Uuid);
+            var toDelete = slaveList.Where(x => !masterUuid.Contains(x.Uuid));
 
             try
             {
@@ -574,11 +559,9 @@ namespace KeePassMasterSlaveSync
                     var deletedObjects = new PwObjectList<PwDeletedObject>();
 
                     foreach (PwEntry entry in toDelete)
-                    {
-                        var dEntry = new PwDeletedObject(entry.Uuid, DateTime.Now);
-                        deletedObjects.Add(dEntry);
-                    }
-                    targetDb.DeletedObjects.Clear();
+                        deletedObjects.Add(new PwDeletedObject(entry.Uuid, DateTime.Now));
+
+                    //targetDb.DeletedObjects.Clear();
                     targetDb.DeletedObjects.Add(deletedObjects);
                     targetDb.MergeIn(targetDb, PwMergeMethod.Synchronize);
                     targetDb.Save(null);
