@@ -14,12 +14,20 @@ namespace KeePassMasterSlaveSync
 {
     public class Sync
     {
-        private static readonly IOConnectionInfo ConnectionInfo = new IOConnectionInfo();
+        private static IOConnectionInfo connectionInfo = null;
+        private static PwDatabase MasterDatabase = null;
+        private static CompositeKey MasterKey = null;
+        private static bool inSlave = false;
 
         private static string currentJob = "";
 
         public static void StartSync(PwDatabase sourceDb)
         {
+            // Get the master database path and data
+            connectionInfo = sourceDb.IOConnectionInfo;
+            MasterDatabase = sourceDb;
+            MasterKey = sourceDb.MasterKey;
+
             // Get all entries out of the group "MSSyncJobs"
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
             if (settingsGroup == null)
@@ -98,8 +106,8 @@ namespace KeePassMasterSlaveSync
 
         public static void StartSyncAgain(PwDatabase sourceDb)
         {
-            //If target job includes sync back with Program.MainForm.ActiveDatabase
-            //Close and open at the end of sync job
+            // In case target job includes sync back with Program.MainForm.ActiveDatabase
+            // Close and open at the end of sync job
             IOConnectionInfo ioinfo = Program.MainForm.ActiveDatabase.IOConnectionInfo;
             CompositeKey nkey = Program.MainForm.ActiveDatabase.MasterKey;
             Program.MainForm.ActiveDatabase.Close();
@@ -123,16 +131,23 @@ namespace KeePassMasterSlaveSync
                 if (settings.Disabled)
                     continue;
 
-                if (CheckKeyFile(sourceDb, settings, settingsEntry))
-                    continue;
+                if (settings.TargetFilePath == connectionInfo.Path)
+                {
+                    inSlave = true;
+                }
+                else
+                {
+                    if (CheckKeyFile(sourceDb, settings, settingsEntry))
+                        continue;
+
+                    if (CheckPasswordOrKeyfile(settings, settingsEntry))
+                        continue;
+                }
 
                 if (CheckTagOrGroup(settings, settingsEntry))
                     continue;
 
                 if (CheckTargetFilePath(settings, settingsEntry))
-                    continue;
-
-                if (CheckPasswordOrKeyfile(settings, settingsEntry))
                     continue;
 
                 try
@@ -144,6 +159,7 @@ namespace KeePassMasterSlaveSync
                 {
                     MessageService.ShowWarning("Synchronization failed:", e);
                 }
+                inSlave = false;
             }
 
             Program.MainForm.OpenDatabase(ioinfo, nkey, true);
@@ -229,7 +245,11 @@ namespace KeePassMasterSlaveSync
         private static void SyncToDb(PwDatabase sourceDb, Settings settings)
         {
             // Create a key for the target database
-            CompositeKey key = CreateCompositeKey(settings.Password, settings.KeyFilePath);
+            CompositeKey key = null;
+            if (inSlave)
+                key = MasterKey;
+            else
+                key = CreateCompositeKey(settings.Password, settings.KeyFilePath);
 
             // Create or open the target database
             PwDatabase targetDatabase = OpenTargetDatabase(settings.TargetFilePath, key);

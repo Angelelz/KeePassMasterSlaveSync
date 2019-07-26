@@ -12,7 +12,7 @@ namespace KeePassMasterSlaveSync
         /// <summary>
         /// The password to protect the target database(optional if <see cref="KeyFilePath"/> is set)
         /// </summary>
-        public ProtectedString Password { get; private set; }
+        public ProtectedString Password { get; internal set; }
         /// <summary>
         /// The path for the target database.
         /// </summary>
