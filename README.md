@@ -33,6 +33,7 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 | `MSS_Tag`<br>[string field]                   | Tag(s) for filtering (`,` to delimit multiple tags - `,` is not allowed in tag names)| Yes, if `MSS_Group` is set        | `MobileSync`                            |
 | `MSS_ExportUserAndPassOnly`<br>[string field]    | If `True` Only the Title, Url, Username and Password will be synced with the target Database. | Yes (defaults to `False`) | `True`                             |
 | `MSS_PerformSlaveJobs`<br>[string field]    | If true, Sync jobs on target database will be executed too. | Yes (defaults to `True`) | `True`                             |
+| `MSS_IsSlave`<br>[string field]    | If `True` this job will be ignored when not executed from a Master database. This option prevents the warning "Missing Password or valid KeyFilePath" to show | Yes (defaults to `False`) | `True`                             |
 
 - Every time the (Master) database is saved, every configured sync job will be executed
 - To disable an export job temporarily just set it to expire, it does not matter the time

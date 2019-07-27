@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using KeePass;
 using KeePassLib;
+using KeePassLib.Interfaces;
 using KeePassLib.Collections;
 using KeePassLib.Keys;
 using KeePassLib.Utility;
@@ -48,6 +49,9 @@ namespace KeePassMasterSlaveSync
                 // Load settings for this job
                 var settings = Settings.Parse(settingsEntry, sourceDb);
                 currentJob = settingsEntry.Strings.GetSafe(PwDefs.TitleField).ReadString();
+
+                if (settings.IsSlave) // If this is true don't perform the job since it has to be done from the master DB
+                    continue;
 
                 if (CheckKeyFile(sourceDb, settings, settingsEntry))
                     continue;
@@ -267,6 +271,10 @@ namespace KeePassMasterSlaveSync
             //Delete slave entries that match Master settings (But not in master)
             PwObjectList<PwEntry> targetList = GetMatching(targetDatabase, settings);
             DeleteExtraEntries(entries, targetList, targetDatabase);
+
+            // Save all changes to the DB
+            targetDatabase.MergeIn(targetDatabase, PwMergeMethod.Synchronize);
+            targetDatabase.Save(new NullStatusLogger());
         }
 
         private static CompositeKey CreateCompositeKey(ProtectedString password, string keyFilePath)
@@ -573,21 +581,18 @@ namespace KeePassMasterSlaveSync
 
             try
             {
-                //targetDb.Save(null);
                 if (toDelete.Count() > 0)
                 {
-                    var deletedObjects = new PwObjectList<PwDeletedObject>();
-
                     foreach (PwEntry entry in toDelete)
-                        deletedObjects.Add(new PwDeletedObject(entry.Uuid, DateTime.Now));
-
-                    //targetDb.DeletedObjects.Clear();
-                    targetDb.DeletedObjects.Add(deletedObjects);
-                    targetDb.MergeIn(targetDb, PwMergeMethod.Synchronize);
-                    targetDb.Save(null);
+                    {
+                        var parentGroup = entry.ParentGroup;
+                        parentGroup.Entries.Remove(entry);
+                        var pdo = new PwDeletedObject(entry.Uuid, DateTime.Now);
+                        targetDb.DeletedObjects.Add(pdo);
+                    }
                 }
             }
-            catch (Exception ev) { MessageService.ShowInfo(ev.Message); }
+            catch(Exception e) { MessageService.ShowInfo(e.Message); }
         }
 
     }

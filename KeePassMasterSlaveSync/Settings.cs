@@ -41,6 +41,10 @@ namespace KeePassMasterSlaveSync
         /// If true, MasterSlaveSync jobs on target database will be executed.
         /// </summary>
         public bool PerformSlaveJobs { get; private set; }
+        /// <summary>
+        /// If true, MasterSlaveSync jobs on target database will be executed.
+        /// </summary>
+        public bool IsSlave { get; private set; }
 
         // Private constructor
         private Settings()
@@ -65,7 +69,8 @@ namespace KeePassMasterSlaveSync
                 Tag = settingsEntry.Strings.ReadSafe("MSS_Tag"),
                 Disabled = (settingsEntry.Expires),
                 ExportUserAndPassOnly = settingsEntry.Strings.ReadSafe("MSS_ExportUserAndPassOnly").ToLower().Trim() == "true",
-                PerformSlaveJobs = settingsEntry.Strings.ReadSafe("MSS_PerformSlaveJobs").ToLower().Trim() != "false"
+                PerformSlaveJobs = settingsEntry.Strings.ReadSafe("MSS_PerformSlaveJobs").ToLower().Trim() != "false",
+                IsSlave = settingsEntry.Strings.ReadSafe("MSS_IsSlave").ToLower().Trim() == "true"
             };
         }
 
