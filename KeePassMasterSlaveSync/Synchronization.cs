@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using KeePass;
 using KeePassLib;
+using KeePassLib.Interfaces;
 using KeePassLib.Collections;
 using KeePassLib.Keys;
 using KeePassLib.Utility;
@@ -14,12 +15,20 @@ namespace KeePassMasterSlaveSync
 {
     public class Sync
     {
-        private static readonly IOConnectionInfo ConnectionInfo = new IOConnectionInfo();
+        private static IOConnectionInfo connectionInfo = null;
+        private static PwDatabase MasterDatabase = null;
+        private static CompositeKey MasterKey = null;
+        private static bool inSlave = false;
 
         private static string currentJob = "";
 
         public static void StartSync(PwDatabase sourceDb)
         {
+            // Get the master database path and data
+            connectionInfo = sourceDb.IOConnectionInfo;
+            MasterDatabase = sourceDb;
+            MasterKey = sourceDb.MasterKey;
+
             // Get all entries out of the group "MSSyncJobs"
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
             if (settingsGroup == null)
@@ -40,6 +49,9 @@ namespace KeePassMasterSlaveSync
                 // Load settings for this job
                 var settings = Settings.Parse(settingsEntry, sourceDb);
                 currentJob = settingsEntry.Strings.GetSafe(PwDefs.TitleField).ReadString();
+
+                if (settings.IsSlave) // If this is true don't perform the job since it has to be done from the master DB
+                    continue;
 
                 if (CheckKeyFile(sourceDb, settings, settingsEntry))
                     continue;
@@ -68,8 +80,8 @@ namespace KeePassMasterSlaveSync
 
                 try
                 {
-                // Execute the export 
-                SyncToDb(sourceDb, settings);
+                    // Execute the export 
+                    SyncToDb(sourceDb, settings);
                 }
                 catch (Exception e)
                 {
@@ -94,12 +106,17 @@ namespace KeePassMasterSlaveSync
                     StartSyncAgain(pwDatabase);
                 }
             }
+
+            connectionInfo = null;
+            MasterDatabase = null;
+            MasterKey = null;
+
         }
 
         public static void StartSyncAgain(PwDatabase sourceDb)
         {
-            //If target job includes sync back with Program.MainForm.ActiveDatabase
-            //Close and open at the end of sync job
+            // In case target job includes sync back with Program.MainForm.ActiveDatabase
+            // Close and open at the end of sync job
             IOConnectionInfo ioinfo = Program.MainForm.ActiveDatabase.IOConnectionInfo;
             CompositeKey nkey = Program.MainForm.ActiveDatabase.MasterKey;
             Program.MainForm.ActiveDatabase.Close();
@@ -123,16 +140,23 @@ namespace KeePassMasterSlaveSync
                 if (settings.Disabled)
                     continue;
 
-                if (CheckKeyFile(sourceDb, settings, settingsEntry))
-                    continue;
+                if (settings.TargetFilePath == connectionInfo.Path)
+                {
+                    inSlave = true;
+                }
+                else
+                {
+                    if (CheckKeyFile(sourceDb, settings, settingsEntry))
+                        continue;
+
+                    if (CheckPasswordOrKeyfile(settings, settingsEntry))
+                        continue;
+                }
 
                 if (CheckTagOrGroup(settings, settingsEntry))
                     continue;
 
                 if (CheckTargetFilePath(settings, settingsEntry))
-                    continue;
-
-                if (CheckPasswordOrKeyfile(settings, settingsEntry))
                     continue;
 
                 try
@@ -144,10 +168,12 @@ namespace KeePassMasterSlaveSync
                 {
                     MessageService.ShowWarning("Synchronization failed:", e);
                 }
+                inSlave = false;
             }
 
             Program.MainForm.OpenDatabase(ioinfo, nkey, true);
             Program.MainForm.Refresh();
+            
         }
 
         private static Boolean CheckKeyFile(PwDatabase sourceDb, Settings settings, PwEntry settingsEntry)
@@ -229,7 +255,11 @@ namespace KeePassMasterSlaveSync
         private static void SyncToDb(PwDatabase sourceDb, Settings settings)
         {
             // Create a key for the target database
-            CompositeKey key = CreateCompositeKey(settings.Password, settings.KeyFilePath);
+            CompositeKey key = null;
+            if (inSlave)
+                key = MasterKey;
+            else
+                key = CreateCompositeKey(settings.Password, settings.KeyFilePath);
 
             // Create or open the target database
             PwDatabase targetDatabase = OpenTargetDatabase(settings.TargetFilePath, key);
@@ -242,11 +272,13 @@ namespace KeePassMasterSlaveSync
 
             // Copy all entries to the new database
             CopyEntriesAndGroups(sourceDb, settings, entries, targetDatabase);
-            targetDatabase.Save(null);
 
             //Delete slave entries that match Master settings (But not in master)
             PwObjectList<PwEntry> targetList = GetMatching(targetDatabase, settings);
             DeleteExtraEntries(entries, targetList, targetDatabase);
+
+            // Save all changes to the DB
+            targetDatabase.Save(new NullStatusLogger());
         }
 
         private static CompositeKey CreateCompositeKey(ProtectedString password, string keyFilePath)
@@ -447,6 +479,7 @@ namespace KeePassMasterSlaveSync
                 }
 
                 CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings);
+                //sourceDb.Save(null);
             }
         }
 
@@ -553,21 +586,18 @@ namespace KeePassMasterSlaveSync
 
             try
             {
-                //targetDb.Save(null);
                 if (toDelete.Count() > 0)
                 {
-                    var deletedObjects = new PwObjectList<PwDeletedObject>();
-
                     foreach (PwEntry entry in toDelete)
-                        deletedObjects.Add(new PwDeletedObject(entry.Uuid, DateTime.Now));
-
-                    //targetDb.DeletedObjects.Clear();
-                    targetDb.DeletedObjects.Add(deletedObjects);
-                    targetDb.MergeIn(targetDb, PwMergeMethod.Synchronize);
-                    targetDb.Save(null);
+                    {
+                        var parentGroup = entry.ParentGroup;
+                        parentGroup.Entries.Remove(entry);
+                        var pdo = new PwDeletedObject(entry.Uuid, DateTime.Now);
+                        targetDb.DeletedObjects.Add(pdo);
+                    }
                 }
             }
-            catch (Exception ev) { MessageService.ShowInfo(ev.Message); }
+            catch(Exception e) { MessageService.ShowInfo(e.Message); }
         }
 
     }
