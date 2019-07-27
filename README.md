@@ -31,16 +31,16 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 | `MSS_TargetFilePath`<br>[string field]        | Path to the target database.<br>(Absolute, or relative to source database parent folder.) | No                       | `C:\sync\mobile.kdbx`<br>or<br>`mobile.kdbx`<br>or<br>`..\mobile.kdbx` |
 | `MSS_Group`<br>[string field]                 | Group(s) for filtering (`,` to delimit multiple groups - `,` is not allowed in group names)| Yes, if `MSS_Tag` is set          | `MobileGroup`                           |
 | `MSS_Tag`<br>[string field]                   | Tag(s) for filtering (`,` to delimit multiple tags - `,` is not allowed in tag names)| Yes, if `MSS_Group` is set        | `MobileSync`                            |
-| `MSS_ExportUserAndPassOnly`<br>[string field]    | If `True` Only the Title, Url, Username and Password will be synced with the target Database. | Yes (defaults to `False`) | `True`                             |
-| `MSS_PerformSlaveJobs`<br>[string field]    | If true, Sync jobs on target database will be executed too. | Yes (defaults to `True`) | `True`                             |
-| `MSS_IsSlave`<br>[string field]    | If `True` this job will be ignored when not executed from a Master database. This option prevents the warning "Missing Password or valid KeyFilePath" to show | Yes (defaults to `False`) | `True`                             |
+| `MSS_ExportUserAndPassOnly`<br>[string field]    | If `True` Only the Title, Url, Username and Password will be synced with the slave Database. | Yes (defaults to `False`) | `True`                             |
+| `MSS_PerformSlaveJobs`<br>[string field]    | If true, Sync jobs on slave database will be executed too (Making it the master for those jobs). | Yes (defaults to `True`) | `True`                             |
+| `MSS_IsSlave`<br>[string field]    | If `True` this job will be ignored when not executed from a Master database. This option prevents the warning "Missing Password or valid KeyFilePath" to show | Yes (defaults to `False`). `MSS_PerformSlaveJobs` must be `true` | `True`                             |
 
 - Every time the (Master) database is saved, every configured sync job will be executed
 - To disable an export job temporarily just set it to expire, it does not matter the time
 - If both `MSS_Group` and `MSS_Tag` are set, only entries matching *both* will be exported
+- You can have a sync job on a slave database to target the Master database without setting a password or a key file by executing from the master and setting MSS_PerformSlaveJobs to true on the master.
 
 ![create](https://raw.githubusercontent.com/Angelelz/KeePassMasterSlaveSync/master/KeePassMasterSlaveSync/Capture/CaptureMSS.png)
 
 ## Next up!
-- As you can see, there is an option to execute every job on the slave databases too (Hence, bidirectional), but that option relies on the slave database having configured the master database password (as a Sync job). I don't think that is desireble, I'm currently working on a way to not need the slave database to know the master database password. Coming soon.
-- I also want the plugin to check if the slave database is open, and in that case handle the refresh after the changes are made.
+- I want the plugin to check if the slave database is open, and in that case handle the refresh after the changes are made.
