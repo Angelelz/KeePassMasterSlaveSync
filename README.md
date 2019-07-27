@@ -42,3 +42,4 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 
 ## Next up!
 - As you can see, there is an option to execute every job on the slave databases too (Hence, bidirectional), but that option relies on the slave database having configured the master database password (as a Sync job). I don't think that is desireble, I'm currently working on a way to not need the slave database to know the master database password. Coming soon.
+- I also want the plugin to check if the slave database is open, and in that case handle the refresh after the changes are made.
