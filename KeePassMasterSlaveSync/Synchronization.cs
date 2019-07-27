@@ -80,8 +80,8 @@ namespace KeePassMasterSlaveSync
 
                 try
                 {
-                // Execute the export 
-                SyncToDb(sourceDb, settings);
+                    // Execute the export 
+                    SyncToDb(sourceDb, settings);
                 }
                 catch (Exception e)
                 {
@@ -106,6 +106,11 @@ namespace KeePassMasterSlaveSync
                     StartSyncAgain(pwDatabase);
                 }
             }
+
+            connectionInfo = null;
+            MasterDatabase = null;
+            MasterKey = null;
+
         }
 
         public static void StartSyncAgain(PwDatabase sourceDb)
@@ -168,6 +173,7 @@ namespace KeePassMasterSlaveSync
 
             Program.MainForm.OpenDatabase(ioinfo, nkey, true);
             Program.MainForm.Refresh();
+            
         }
 
         private static Boolean CheckKeyFile(PwDatabase sourceDb, Settings settings, PwEntry settingsEntry)
@@ -266,14 +272,12 @@ namespace KeePassMasterSlaveSync
 
             // Copy all entries to the new database
             CopyEntriesAndGroups(sourceDb, settings, entries, targetDatabase);
-            targetDatabase.Save(null);
 
             //Delete slave entries that match Master settings (But not in master)
             PwObjectList<PwEntry> targetList = GetMatching(targetDatabase, settings);
             DeleteExtraEntries(entries, targetList, targetDatabase);
 
             // Save all changes to the DB
-            targetDatabase.MergeIn(targetDatabase, PwMergeMethod.Synchronize);
             targetDatabase.Save(new NullStatusLogger());
         }
 
@@ -475,6 +479,7 @@ namespace KeePassMasterSlaveSync
                 }
 
                 CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings);
+                //sourceDb.Save(null);
             }
         }
 
