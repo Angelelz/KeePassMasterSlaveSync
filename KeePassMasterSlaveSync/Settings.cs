@@ -42,7 +42,7 @@ namespace KeePassMasterSlaveSync
         /// </summary>
         public bool PerformSlaveJobs { get; private set; }
         /// <summary>
-        /// If true, MasterSlaveSync jobs on target database will be executed.
+        /// If true, this job will be ignored when not executed from a Master database.
         /// </summary>
         public bool IsSlave { get; private set; }
 
