@@ -59,7 +59,7 @@ namespace KeePassMasterSlaveSync
                 if (CheckTagOrGroup(settings, settingsEntry))
                     continue;
 
-                if (CheckTargetFilePath(settings, settingsEntry))
+                if (CheckTargetFilePath(settings, settingsEntry, sourceDb))
                     continue;
 
                 if (CheckPasswordOrKeyfile(settings, settingsEntry))
@@ -140,6 +140,9 @@ namespace KeePassMasterSlaveSync
                 if (settings.Disabled)
                     continue;
 
+                if (CheckTargetFilePath(settings, settingsEntry, sourceDb))
+                    continue;
+
                 if (settings.TargetFilePath == connectionInfo.Path)
                 {
                     inSlave = true;
@@ -154,9 +157,6 @@ namespace KeePassMasterSlaveSync
                 }
 
                 if (CheckTagOrGroup(settings, settingsEntry))
-                    continue;
-
-                if (CheckTargetFilePath(settings, settingsEntry))
                     continue;
 
                 try
@@ -215,7 +215,7 @@ namespace KeePassMasterSlaveSync
             return false;
         }
 
-        private static bool CheckTargetFilePath(Settings settings, PwEntry settingsEntry)
+        private static bool CheckTargetFilePath(Settings settings, PwEntry settingsEntry, PwDatabase sourceDb)
         {
             // Require targetFilePath
             if (string.IsNullOrEmpty(settings.TargetFilePath))
@@ -224,6 +224,17 @@ namespace KeePassMasterSlaveSync
                                            settingsEntry.Strings.ReadSafe("Title"));
                 return true;
             }
+
+            // Default to same folder as sourceDb for the keyfile if no directory is specified
+            if (!Path.IsPathRooted(settings.TargetFilePath))
+            {
+                string sourceDbPath = Path.GetDirectoryName(sourceDb.IOConnectionInfo.Path);
+                if (sourceDbPath != null)
+                {
+                    settings.TargetFilePath = Path.Combine(sourceDbPath, settings.TargetFilePath);
+                }
+            }
+
             if (!File.Exists(settings.TargetFilePath))
             {
                 MessageService.ShowWarning("MasterSlaveSync: Slave Database not found for: " +
