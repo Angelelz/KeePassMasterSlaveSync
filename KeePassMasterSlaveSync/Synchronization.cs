@@ -29,6 +29,9 @@ namespace KeePassMasterSlaveSync
             MasterDatabase = sourceDb;
             MasterKey = sourceDb.MasterKey;
 
+            // Get Opened databases
+            var openedDatabases = Program.MainForm.DocumentManager.Documents.Select(x => x.Database).ToList();
+
             // Get all entries out of the group "MSSyncJobs"
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
             if (settingsGroup == null)
