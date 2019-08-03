@@ -36,11 +36,13 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 | `MSS_IsSlave`<br>[string field]    | If `True` this job will be ignored when not executed from a Master database. This option prevents the warning "Missing Password or valid KeyFilePath" to show | Yes (defaults to `False`). `MSS_PerformSlaveJobs` must be `true` | `True`                             |
 
 - Every time the (Master) database is saved, every configured sync job will be executed
-- To disable an export job temporarily just set it to expire, it does not matter the time
+- To disable an sync job temporarily just set it to expire, it does not matter the time
 - If both `MSS_Group` and `MSS_Tag` are set, only entries matching *both* will be exported
 - You can have a sync job on a slave database to target the Master database without setting a password or a key file, by executing from the master and setting MSS_PerformSlaveJobs to true on the master.
+- The plugin will automatically update the UI of any opened database.
 
 ![create](https://raw.githubusercontent.com/Angelelz/KeePassMasterSlaveSync/master/KeePassMasterSlaveSync/Capture/CaptureMSS.png)
 
 ## Next up!
-- I want the plugin to check if the slave database is open, and in that case handle the refresh after the changes are made.
+- If slave database moves any of the sync items to another folder, you will get the duplicates Uuids message. This has to be taken care of.
+- You tell me...
