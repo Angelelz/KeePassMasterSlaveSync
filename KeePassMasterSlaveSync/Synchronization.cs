@@ -16,21 +16,20 @@ namespace KeePassMasterSlaveSync
     public class Sync
     {
         private static IOConnectionInfo connectionInfo = null;
-        private static PwDatabase MasterDatabase = null;
         private static CompositeKey MasterKey = null;
         private static bool inSlave = false;
+        private static List<string> EditedDatabases = new List<string>();
 
         private static string currentJob = "";
 
         public static void StartSync(PwDatabase sourceDb)
         {
+            // Update EditedDatabases
+            EditedDatabases.Add(sourceDb.IOConnectionInfo.Path);
+
             // Get the master database path and data
             connectionInfo = sourceDb.IOConnectionInfo;
-            MasterDatabase = sourceDb;
             MasterKey = sourceDb.MasterKey;
-
-            // Get Opened databases
-            var openedDatabases = Program.MainForm.DocumentManager.Documents.Select(x => x.Database).ToList();
 
             // Get all entries out of the group "MSSyncJobs"
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
@@ -81,6 +80,10 @@ namespace KeePassMasterSlaveSync
                 if (settings.Disabled)
                     continue;
 
+                // Update Edited Databases
+                if (!EditedDatabases.Contains(settings.TargetFilePath))
+                    EditedDatabases.Add(settings.TargetFilePath);
+
                 try
                 {
                     // Execute the export 
@@ -90,14 +93,13 @@ namespace KeePassMasterSlaveSync
                 {
                     MessageService.ShowWarning("Synchronization failed:", e);
                 }
-                Program.MainForm.Refresh();
             }
 
 
             //Start Synchronization from slaves
             for (int i = 0; i < slavesPaths.Count; ++i)
             {
-                if (!slavesCheck[0])
+                if (!slavesCheck[i])
                 {
 
                     // Create a key for the target database
@@ -105,25 +107,19 @@ namespace KeePassMasterSlaveSync
 
                     // Create or open the target database
                     PwDatabase pwDatabase = OpenTargetDatabase(slavesPaths[i], key);
-
+                    
                     StartSyncAgain(pwDatabase);
                 }
             }
-
+            UpdateOpenedDB(sourceDb.IOConnectionInfo.Path);
             connectionInfo = null;
-            MasterDatabase = null;
             MasterKey = null;
-
+            inSlave = false;
+            currentJob = "";
         }
 
         public static void StartSyncAgain(PwDatabase sourceDb)
         {
-            // In case target job includes sync back with Program.MainForm.ActiveDatabase
-            // Close and open at the end of sync job
-            IOConnectionInfo ioinfo = Program.MainForm.ActiveDatabase.IOConnectionInfo;
-            CompositeKey nkey = Program.MainForm.ActiveDatabase.MasterKey;
-            Program.MainForm.ActiveDatabase.Close();
-
             // Get all entries out of the group "MSSyncJobs". Each one is a sync job
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
             if (settingsGroup == null)
@@ -162,6 +158,10 @@ namespace KeePassMasterSlaveSync
                 if (CheckTagOrGroup(settings, settingsEntry))
                     continue;
 
+                // Update Edited Databases
+                if (!EditedDatabases.Contains(settings.TargetFilePath))
+                    EditedDatabases.Add(settings.TargetFilePath);
+
                 try
                 {
                     // Execute the export 
@@ -173,10 +173,34 @@ namespace KeePassMasterSlaveSync
                 }
                 inSlave = false;
             }
+        }
 
-            Program.MainForm.OpenDatabase(ioinfo, nkey, true);
-            Program.MainForm.Refresh();
-            
+        public static void UpdateOpenedDB(string pathToMaster)
+        {
+            if (EditedDatabases.Count() > 1) // Not just the Master DB
+            {
+                var openedDocuments = Program.MainForm.DocumentManager.Documents;
+                var openedEditedDocuments = openedDocuments.Where(d =>
+                    EditedDatabases.Contains(d.Database.IOConnectionInfo.Path)).ToList();
+                var doc = openedEditedDocuments.FirstOrDefault();
+                int n = openedEditedDocuments.Count();
+                if (n > 0)
+                    for (int i = 0; i < n; ++i)
+                        if (!Program.MainForm.IsFileLocked(doc))
+                        {
+                            openedEditedDocuments.Remove(doc);
+                            var db = doc.Database;
+                            var key = db.MasterKey;
+                            var ioc = db.IOConnectionInfo;
+                            Program.MainForm.DocumentManager.CloseDatabase(doc.Database);
+                            Program.MainForm.OpenDatabase(ioc, key, true);
+                            doc = openedEditedDocuments.FirstOrDefault();
+                        }
+                var masterDoc = Program.MainForm.DocumentManager.Documents.Where(d =>
+                    d.Database.IOConnectionInfo.Path == pathToMaster).FirstOrDefault();
+                Program.MainForm.MakeDocumentActive(masterDoc);
+            }
+            EditedDatabases.Clear();
         }
 
         private static Boolean CheckKeyFile(PwDatabase sourceDb, Settings settings, PwEntry settingsEntry)
@@ -292,6 +316,7 @@ namespace KeePassMasterSlaveSync
             DeleteExtraEntries(entries, targetList, targetDatabase);
 
             // Save all changes to the DB
+            sourceDb.Save(new NullStatusLogger());
             targetDatabase.Save(new NullStatusLogger());
         }
 
@@ -476,7 +501,6 @@ namespace KeePassMasterSlaveSync
                 if (peNew != null && peNew.LastModificationTime.CompareTo(entry.LastModificationTime) > 0)
                 {
                     CloneEntry(targetDatabase, sourceDb, peNew, entry, targetGroup, settings);
-                    sourceDb.Save(null);
                     continue;
                 }
 
