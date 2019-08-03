@@ -516,6 +516,11 @@ namespace KeePassMasterSlaveSync
                     }
                 }
 
+                // Handle Duplicate entries
+                PwEntry dupEntry = targetDatabase.RootGroup.FindEntry(entry.Uuid, true);
+                if (dupEntry != null && dupEntry.ParentGroup.Uuid.ToHexString() != targetGroup.Uuid.ToHexString())
+                    dupEntry.SetUuid(new PwUuid(true), false);
+
                 CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings);
                 //sourceDb.Save(null);
             }
@@ -619,8 +624,8 @@ namespace KeePassMasterSlaveSync
         private static void DeleteExtraEntries(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList, PwDatabase targetDb)
         {
             //Find entries in slaveList not in masterList to delete
-            IEnumerable<PwUuid> masterUuid = masterList.Select(x => x.Uuid);
-            var toDelete = slaveList.Where(x => !masterUuid.Contains(x.Uuid));
+            IEnumerable<PwUuid> masterUuid = masterList.Select(u => u.Uuid);
+            var toDelete = slaveList.Where(e => !masterUuid.Contains(e.Uuid));
 
             try
             {
