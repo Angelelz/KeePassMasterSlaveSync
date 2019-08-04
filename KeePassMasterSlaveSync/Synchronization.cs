@@ -19,8 +19,7 @@ namespace KeePassMasterSlaveSync
         private static CompositeKey MasterKey = null;
         private static bool inSlave = false;
         private static List<string> EditedDatabases = new List<string>();
-
-        private static bool changeUuid = false;
+        
         private static string currentJob = "";
 
         public static void StartSync(PwDatabase sourceDb)
@@ -503,31 +502,10 @@ namespace KeePassMasterSlaveSync
                     continue;
                 }
 
-                /*
-                // Make sure slave had not deleted any sync entries otherwise there will be duplicated uuids
-                if (targetDatabase.RecycleBinEnabled)
-                {
-                    var recycleBin = targetDatabase.RootGroup.FindGroup(targetDatabase.RecycleBinUuid, false);
-                    PwEntry repEntry = recycleBin.FindEntry(entry.Uuid, true);
-                    if (repEntry != null)
-                    {
-                        if (changeUuid)
-                            repEntry.SetUuid(new PwUuid(true), false);
-                        else
-                            DeleteEntry(repEntry, targetDatabase);
-                    }
-                }
-                */
-
                 // Handle Duplicates entries' Uuids
                 PwEntry duplicatedEntry = targetDatabase.RootGroup.FindEntry(entry.Uuid, true);
                 if (duplicatedEntry != null && duplicatedEntry.ParentGroup.Uuid.ToHexString() != targetGroup.Uuid.ToHexString())
-                {
-                    if (changeUuid)
-                        duplicatedEntry.SetUuid(new PwUuid(true), false);
-                    else
-                        DeleteEntry(duplicatedEntry, targetDatabase);
-                }
+                    DeleteEntry(duplicatedEntry, targetDatabase);
 
                 CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings);
             }
