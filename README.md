@@ -38,7 +38,7 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 - Every time the (Master) database is saved, every configured sync job will be executed
 - To disable an sync job temporarily just set it to expire, it does not matter the time
 - If both `MSS_Group` and `MSS_Tag` are set, only entries matching *both* will be exported
-- You can have a sync job on a slave database to target the Master database without setting a password or a key file, by executing from the master and setting MSS_PerformSlaveJobs to true on the master.
+- You can have a sync job on a slave database to target the Master database without setting a password or a key file, by executing from the master and setting 'MSS_IsSlave' to true in slave and 'MSS_PerformSlaveJobs' to true on the master.
 - The plugin will automatically update the UI of any opened database.
 - To prevent duplicated Uuids, the plugin will delete any entry from the slave DB that has been moved out of the synced group or tag.
 
