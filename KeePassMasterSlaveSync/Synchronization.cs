@@ -19,7 +19,7 @@ namespace KeePassMasterSlaveSync
         private static CompositeKey MasterKey = null;
         private static bool inSlave = false;
         private static List<string> EditedDatabases = new List<string>();
-
+        
         private static string currentJob = "";
 
         public static void StartSync(PwDatabase sourceDb)
@@ -313,7 +313,7 @@ namespace KeePassMasterSlaveSync
 
             //Delete slave entries that match Master settings (But not in master)
             PwObjectList<PwEntry> targetList = GetMatching(targetDatabase, settings);
-            DeleteExtraEntries(entries, targetList, targetDatabase);
+            SelectEntriesAndDelete(entries, targetList, targetDatabase);
 
             // Save all changes to the DB
             sourceDb.Save(new NullStatusLogger());
@@ -495,8 +495,6 @@ namespace KeePassMasterSlaveSync
 
                 PwEntry peNew = targetGroup.FindEntry(entry.Uuid, bSearchRecursive: false);
 
-
-
                 // Check if the target entry is newer than the source entry  && peNew.LastModificationTime > entry.LastModificationTime
                 if (peNew != null && peNew.LastModificationTime.CompareTo(entry.LastModificationTime) > 0)
                 {
@@ -504,20 +502,12 @@ namespace KeePassMasterSlaveSync
                     continue;
                 }
 
-
-                // Make sure slave had not deleted any sync entries otherwise there will be duplicated uuids
-                if (targetDatabase.RecycleBinEnabled)
-                {
-                    var recycleBin = targetDatabase.RootGroup.FindGroup(targetDatabase.RecycleBinUuid, false);
-                    PwEntry repEntry = recycleBin.FindEntry(entry.Uuid, true);
-                    if (repEntry != null)
-                    {
-                        repEntry.SetUuid(new PwUuid(true), false);
-                    }
-                }
+                // Handle Duplicates entries' Uuids
+                PwEntry duplicatedEntry = targetDatabase.RootGroup.FindEntry(entry.Uuid, true);
+                if (duplicatedEntry != null && duplicatedEntry.ParentGroup.Uuid.ToHexString() != targetGroup.Uuid.ToHexString())
+                    DeleteEntry(duplicatedEntry, targetDatabase);
 
                 CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings);
-                //sourceDb.Save(null);
             }
         }
 
@@ -616,26 +606,46 @@ namespace KeePassMasterSlaveSync
             HandleCustomIcon(targetDb, sourceDb, sourceEntry);
         }
 
-        private static void DeleteExtraEntries(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList, PwDatabase targetDb)
+        private static void SelectEntriesAndDelete(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList, PwDatabase targetDb)
         {
             //Find entries in slaveList not in masterList to delete
-            IEnumerable<PwUuid> masterUuid = masterList.Select(x => x.Uuid);
-            var toDelete = slaveList.Where(x => !masterUuid.Contains(x.Uuid));
+            IEnumerable<PwUuid> masterUuid = masterList.Select(u => u.Uuid);
+            var toDelete = slaveList.Where(e => !masterUuid.Contains(e.Uuid)).ToList();
 
+            DeleteEntries(toDelete, targetDb);
+        }
+
+        private static void DeleteEntries(List<PwEntry> entriesToDelete, PwDatabase dB)
+        {
             try
             {
-                if (toDelete.Count() > 0)
+                if (entriesToDelete.Count() > 0)
                 {
-                    foreach (PwEntry entry in toDelete)
+                    foreach (PwEntry entry in entriesToDelete)
                     {
                         var parentGroup = entry.ParentGroup;
                         parentGroup.Entries.Remove(entry);
                         var pdo = new PwDeletedObject(entry.Uuid, DateTime.Now);
-                        targetDb.DeletedObjects.Add(pdo);
+                        dB.DeletedObjects.Add(pdo);
                     }
                 }
             }
-            catch(Exception e) { MessageService.ShowInfo(e.Message); }
+            catch (Exception e) { MessageService.ShowInfo(e.Message); }
+        }
+
+        private static void DeleteEntry(PwEntry entryToDelete, PwDatabase dB)
+        {
+            try
+            {
+                if (entryToDelete != null)
+                {
+                    var parentGroup = entryToDelete.ParentGroup;
+                    parentGroup.Entries.Remove(entryToDelete);
+                    var pdo = new PwDeletedObject(entryToDelete.Uuid, DateTime.Now);
+                    dB.DeletedObjects.Add(pdo);
+                }
+            }
+            catch (Exception e) { MessageService.ShowInfo(e.Message); }
         }
 
     }
