@@ -1,4 +1,8 @@
 # KeePassMasterSlaveSync
+[![Latest release](https://img.shields.io/github/release/Angelelz/KeePassMasterSlaveSync.svg?label=latest%20release)](https://github.com/Angelelz/KeePassMasterSlaveSync/releases/latest)
+[![Github All Releases](https://img.shields.io/github/downloads/Angelelz/KeePassMasterSlaveSync/total.svg)](https://github.com/Angelelz/KeePassMasterSlaveSync/releases)
+[![License](https://img.shields.io/github/license/Angelelz/KeePassMasterSlaveSync.svg)](https://github.com/Angelelz/KeePassMasterSlaveSync/blob/master/LICENSE)
+
 KeePassMasterSlaveSync is a KeePass 2 plugin that Allows synchronization of specific Groups or Tags between local databases.
 This plugin is heavily based on [KeePassSubsetExport.](https://github.com/lukeIam/KeePassSubsetExport)
 
