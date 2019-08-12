@@ -1,6 +1,9 @@
 ﻿using KeePassLib;
 using KeePassLib.Security;
 using KeePass.Util.Spr;
+using System.Collections.Generic;
+using System.Linq;
+using System;
 
 namespace KeePassMasterSlaveSync
 {
@@ -74,13 +77,80 @@ namespace KeePassMasterSlaveSync
             };
         }
 
+        public static string GetField(string code)
+        {
+            string field = "";
+            switch (code)
+            {
+                case ("T"):
+                    field = PwDefs.TitleField;
+                    break;
+                case ("U"):
+                    field = PwDefs.UserNameField;
+                    break;
+                case ("P"):
+                    field = PwDefs.PasswordField;
+                    break;
+                case ("A"):
+                    field = PwDefs.UrlField;
+                    break;
+                case ("N"):
+                    field = PwDefs.NotesField;
+                    break;
+                case ("I"):
+                    field = "Uuid";
+                    break;
+            }
+            return field;
+        }
+
+        public static Byte[] ConvertoPwUuid(string hex)
+        {
+            int NumberChars = hex.Length;
+            byte[] bytes = new byte[NumberChars / 2];
+            for (int i = 0; i < NumberChars; i += 2)
+                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
+            return bytes;
+        }
+
         public static ProtectedString GetFieldWRef(PwEntry entry, PwDatabase sourceDb, string fieldName)
         //Had to implement this fuction here, since Exporter is private
         {
+            ProtectedString psField = entry.Strings.GetSafe(fieldName);
+            if (psField.Length > 9)
+            {
+                if (psField.Remove(4, psField.Length - 4).Equals(new ProtectedString(true, @"{REF:")))
+                {
+                    string sField = psField.ReadString();
+                    string wField = sField.Substring(5, 1);
+                    string sIn = sField.Substring(7, 1);
+                    string text = sField.Substring(9, sField.Length - 10);
+                    PwEntry refEntry = null;
+                    if (sIn == "I")
+                    {
+                        PwUuid uuid = new PwUuid(ConvertoPwUuid(text));
+                        refEntry = sourceDb.RootGroup.FindEntry(uuid, true);
+                    }
+                    else
+                    {
+                        var entries = sourceDb.RootGroup.GetEntries(true).ToList();
+                        refEntry = entries.Where(e => e.Strings.ReadSafe(GetField(sIn)) == text).FirstOrDefault();
+                    }
+                    return GetFieldWRef(refEntry, sourceDb, GetField(wField)); // Allow recursivity
+                }
+                else return psField;
+            }
+            else return psField;
+
+            /*
             SprContext ctx = new SprContext(entry, sourceDb,
-                    SprCompileFlags.All, false, false);
-            return ProtectedString.EmptyEx.Insert(0, SprEngine.Compile(
-                    entry.Strings.ReadSafe(fieldName), ctx));
+                SprCompileFlags.All);
+            return new ProtectedString(true, SprEngine.Compile(
+                entry.Strings.ReadSafe(fieldName), ctx));
+
+            */
+
+
             /* This next code is borrowed from KeePassHttps, I don't know what it does:
             var f = (MethodInvoker)delegate
             {

@@ -302,7 +302,7 @@ namespace KeePassMasterSlaveSync
             // Create or open the target database
             PwDatabase targetDatabase = OpenTargetDatabase(settings.TargetFilePath, key);
 
-            // Assign the properties of the source root group to the target root group
+            // Copy the MasterDB source group icon to the target group
             HandleCustomIcon(targetDatabase, sourceDb, sourceDb.RootGroup);
 
             // Find all entries matching the tag and/or group
