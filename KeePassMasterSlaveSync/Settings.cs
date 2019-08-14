@@ -4,6 +4,7 @@ using KeePass.Util.Spr;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using KeePassLib.Utility;
 
 namespace KeePassMasterSlaveSync
 {
@@ -114,52 +115,54 @@ namespace KeePassMasterSlaveSync
         {
             ProtectedString psField = entry.Strings.GetSafe(fieldName);
 
-            byte[] RefByteArray = new byte[] { 123, 82, 69, 70, 58 };
+            // {REF: represented in Byte array
+            byte[] refByteArray = new byte[] { 123, 82, 69, 70, 58 };
 
+            // First 5 characters of the field
             byte[] byteField = psField.ReadUtf8().Take(5).ToArray();
 
-            if (byteField.SequenceEqual(RefByteArray))  // {REF:<WantedField>@<SearchIn>:<Text>}
+            bool isRef = byteField.SequenceEqual(refByteArray);
+            MemUtil.ZeroByteArray(byteField);
+
+            // if the field starts with {REF:
+            if (isRef)
             {
-                string stringField = psField.ReadString();  // {REF:P@I:46C9B1FFBD4ABC4BBB260C6190BAD20C}
-                string wantedField = stringField.Substring(5, 1);
-                string searchIn = stringField.Substring(7, 1);
-                string text = stringField.Substring(9, stringField.Length - 10);
-                PwEntry refEntry = null;
-                if (searchIn == "I")
+                try
                 {
-                    PwUuid uuid = new PwUuid(ConvertoPwUuid(text));
-                    refEntry = sourceDb.RootGroup.FindEntry(uuid, true);
+                    /* A reference looks like this:
+                     * {REF:P@I:46C9B1FFBD4ABC4BBB260C6190BAD20C}
+                     * {REF:<WantedField>@<SearchIn>:<Text>}
+                     */
+
+                    // First 8 characters of the field {REF:<WantedField>@<SearchIn>
+                    string refField = psField.Remove(8, psField.Length - 8).ReadString();
+
+                    // <WantedField> Character
+                    string wantedField = refField.Substring(5, 1);
+
+                    // <SearchIn> Character
+                    string searchIn = refField.Substring(7, 1);
+
+                    // text of the field, protected in case it's a password
+                    ProtectedString text = psField.Remove(psField.Length - 1, 1).Remove(0, 9);
+
+                    PwEntry refEntry = null;
+                    if (searchIn == "I")
+                    {
+                        PwUuid uuid = new PwUuid(ConvertoPwUuid(text.ReadString()));
+                        refEntry = sourceDb.RootGroup.FindEntry(uuid, true);
+                    }
+                    else
+                    {
+                        var entries = sourceDb.RootGroup.GetEntries(true).ToList();
+                        refEntry = entries.Where(e => e.Strings.GetSafe(GetField(searchIn)).Equals(text)).FirstOrDefault();
+                    }
+                    if (refEntry != null)
+                        return GetFieldWRef(refEntry, sourceDb, GetField(wantedField));   // Allow recursivity
                 }
-                else
-                {
-                    var entries = sourceDb.RootGroup.GetEntries(true).ToList();
-                    refEntry = entries.Where(e => e.Strings.ReadSafe(GetField(searchIn)) == text).FirstOrDefault();
-                }
-                if (refEntry != null)
-                    return GetFieldWRef(refEntry, sourceDb, GetField(wantedField)); // Allow recursivity
+                catch (Exception) { return psField; }  // In case the ref doesn't exists or has a mistake
             }
             return psField;
-
-            /*
-            SprContext ctx = new SprContext(entry, sourceDb,
-                SprCompileFlags.All);
-            return new ProtectedString(true, SprEngine.Compile(
-                entry.Strings.ReadSafe(fieldName), ctx));
-
-            */
-
-
-            /* This next code is borrowed from KeePassHttps, I don't know what it does:
-            var f = (MethodInvoker)delegate
-            {
-                // apparently, SprEngine.Compile might modify the database
-                host.MainWindow.UpdateUI(false, null, false, null, false, null, false);
-            };
-            if (host.MainWindow.InvokeRequired)
-                host.MainWindow.Invoke(f);
-            else
-                f.Invoke();
-            */
         }
     }
     
