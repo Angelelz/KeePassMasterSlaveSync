@@ -97,9 +97,6 @@ namespace KeePassMasterSlaveSync
                 case ("N"):
                     field = PwDefs.NotesField;
                     break;
-                case ("I"):
-                    field = "Uuid";
-                    break;
             }
             return field;
         }
@@ -114,33 +111,34 @@ namespace KeePassMasterSlaveSync
         }
 
         public static ProtectedString GetFieldWRef(PwEntry entry, PwDatabase sourceDb, string fieldName)
-        //Had to implement this fuction here, since Exporter is private
         {
             ProtectedString psField = entry.Strings.GetSafe(fieldName);
-            if (psField.Length > 9)
+
+            byte[] RefByteArray = new byte[] { 123, 82, 69, 70, 58 };
+
+            byte[] byteField = psField.ReadUtf8().Take(5).ToArray();
+
+            if (byteField.SequenceEqual(RefByteArray))  // {REF:<WantedField>@<SearchIn>:<Text>}
             {
-                if (psField.Remove(4, psField.Length - 4).Equals(new ProtectedString(true, @"{REF:")))
+                string stringField = psField.ReadString();  // {REF:P@I:46C9B1FFBD4ABC4BBB260C6190BAD20C}
+                string wantedField = stringField.Substring(5, 1);
+                string searchIn = stringField.Substring(7, 1);
+                string text = stringField.Substring(9, stringField.Length - 10);
+                PwEntry refEntry = null;
+                if (searchIn == "I")
                 {
-                    string sField = psField.ReadString();
-                    string wField = sField.Substring(5, 1);
-                    string sIn = sField.Substring(7, 1);
-                    string text = sField.Substring(9, sField.Length - 10);
-                    PwEntry refEntry = null;
-                    if (sIn == "I")
-                    {
-                        PwUuid uuid = new PwUuid(ConvertoPwUuid(text));
-                        refEntry = sourceDb.RootGroup.FindEntry(uuid, true);
-                    }
-                    else
-                    {
-                        var entries = sourceDb.RootGroup.GetEntries(true).ToList();
-                        refEntry = entries.Where(e => e.Strings.ReadSafe(GetField(sIn)) == text).FirstOrDefault();
-                    }
-                    return GetFieldWRef(refEntry, sourceDb, GetField(wField)); // Allow recursivity
+                    PwUuid uuid = new PwUuid(ConvertoPwUuid(text));
+                    refEntry = sourceDb.RootGroup.FindEntry(uuid, true);
                 }
-                else return psField;
+                else
+                {
+                    var entries = sourceDb.RootGroup.GetEntries(true).ToList();
+                    refEntry = entries.Where(e => e.Strings.ReadSafe(GetField(searchIn)) == text).FirstOrDefault();
+                }
+                if (refEntry != null)
+                    return GetFieldWRef(refEntry, sourceDb, GetField(wantedField)); // Allow recursivity
             }
-            else return psField;
+            return psField;
 
             /*
             SprContext ctx = new SprContext(entry, sourceDb,
