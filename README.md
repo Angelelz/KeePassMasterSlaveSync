@@ -38,12 +38,13 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 | `MSS_ExportUserAndPassOnly`<br>[string field]    | If `True` Only the Title, Url, Username and Password will be synced with the slave Database. | Yes (defaults to `False`) | `True`                             |
 | `MSS_PerformSlaveJobs`<br>[string field]    | If true, Sync jobs on slave database will be executed too (Making it the master for those jobs). | Yes (defaults to `True`) | `True`                             |
 | `MSS_IsSlave`<br>[string field]    | If `True` this job will be ignored when not executed from a Master database. This option prevents the warning "Missing Password or valid KeyFilePath" to show | Yes (defaults to `False`). `MSS_PerformSlaveJobs` must be `true` | `True`                             |
+| `MSS_SyncNewSlaveEntries`<br>[string field]    | If `True`, entries created in the slave database (in the synced groups or tags) are copied to the Master instead of being deleted. Entries deleted in the Master are still deleted from the slave. | Yes (defaults to `False`) | `True`                             |
 
-- Every time the (Master) database is saved, every configured sync job will be executed
+- Every time the (Master) database is saved, every configured sync job will be executed. The jobs run before the Master is written, so changes taken from the slaves are saved with it; the slave databases are written after the Master.
 - To disable an sync job temporarily just set it to expire, it does not matter the time
 - If both `MSS_Group` and `MSS_Tag` are set, only entries matching *both* will be exported
 - You can have a sync job on a slave database to target the Master database without setting a password or a key file, by executing from the master and setting 'MSS_IsSlave' to true in slave and 'MSS_PerformSlaveJobs' to true on the master.
-- The plugin will automatically update the UI of any opened database. Databases opened in KeePass (including the Master) are changed in memory and marked as modified, save them to keep the changes. The plugin only writes slave databases that are not opened in KeePass, and only if they changed.
+- The plugin will automatically update the UI of any opened database. Other databases opened in KeePass are changed in memory and marked as modified, save them to keep the changes. The plugin only writes slave databases that are not opened in KeePass, and only if they changed.
 - To prevent duplicated Uuids, the plugin will delete any entry from the slave DB that has been moved out of the synced group or tag.
 
 ![create](https://raw.githubusercontent.com/Angelelz/KeePassMasterSlaveSync/master/KeePassMasterSlaveSync/Capture/CaptureMSS.png)

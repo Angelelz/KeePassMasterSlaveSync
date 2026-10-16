@@ -34,26 +34,71 @@ namespace KeePassMasterSlaveSync
         // All databases of the current run by full path, so each file is opened and written only once
         private static Dictionary<string, SyncDatabase> Databases =
             new Dictionary<string, SyncDatabase>(StringComparer.OrdinalIgnoreCase);
+        private static SyncDatabase master = null;
+        // The save whose jobs ran before the master was written
+        private static Guid syncedSave = Guid.Empty;
+        // A save of a copy of the master, which is not synchronized
+        private static Guid skippedSave = Guid.Empty;
 
         private static string currentJob = "";
 
-        public static void StartSync(PwDatabase sourceDb)
+        /// <summary>
+        /// Runs the jobs before the master is written, so the changes taken from the slaves are saved with it.
+        /// The slave databases are written once the master has been saved (see SyncAfterSave).
+        /// </summary>
+        public static void SyncBeforeSave(PwDatabase sourceDb, Guid eventGuid, bool copy)
+        {
+            // Discard the databases of a save that has been canceled
+            EndSync(false, false);
+
+            if (copy)
+                skippedSave = eventGuid;
+            else if (RunJobs(sourceDb))
+                syncedSave = eventGuid;
+        }
+
+        /// <summary>
+        /// Writes the slave databases once the master has been saved.
+        /// </summary>
+        public static void SyncAfterSave(PwDatabase sourceDb, Guid eventGuid, bool success)
+        {
+            if (eventGuid != Guid.Empty && eventGuid == skippedSave)
+                return;
+
+            if (eventGuid != Guid.Empty && eventGuid == syncedSave)
+            {
+                // The master has been written with the changes, the slaves are only written if it succeeded
+                EndSync(success, success);
+                return;
+            }
+
+            // The jobs did not run before this save, so they run now. The master is not written again (that
+            // can fail on network shares and lose the file), its changes are only marked as modified.
+            EndSync(false, false);
+            if (success && RunJobs(sourceDb))
+                EndSync(true, false);
+        }
+
+        /// <summary>
+        /// Runs all jobs of a master database in memory.
+        /// </summary>
+        /// <returns>False if the database has no sync jobs.</returns>
+        private static bool RunJobs(PwDatabase sourceDb)
         {
             // Get all entries out of the group "MSSyncJobs"
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
             if (settingsGroup == null || isRunning)
             {
-                return;
+                return false;
             }
             IEnumerable<PwEntry> jobSettings = settingsGroup.Entries;
 
             isRunning = true;
             try
             {
-                // The master has just been saved by KeePass. It is only changed in memory and marked as
-                // modified: writing it again right away can fail on network shares and lose the file.
+                // Get the master database path
                 connectionInfo = sourceDb.IOConnectionInfo;
-                SyncDatabase master = new SyncDatabase() { Database = sourceDb, IsOpen = true };
+                master = new SyncDatabase() { Database = sourceDb, IsOpen = true };
                 Databases[NormalizePath(connectionInfo.Path)] = master;
 
                 //This will be the list of the slave jobs to perform
@@ -94,8 +139,30 @@ namespace KeePassMasterSlaveSync
                 //Start Synchronization from slaves
                 foreach (Settings slave in slaves)
                     StartSyncAgain(GetDatabase(slave.TargetFilePath, slave));
+            }
+            catch (Exception e)
+            {
+                MessageService.ShowWarning("Synchronization failed:", e);
+            }
+            finally
+            {
+                connectionInfo = null;
+                isRunning = false;
+                currentJob = "";
+            }
+            return true;
+        }
 
-                SaveDatabases();
+        /// <summary>
+        /// Ends a synchronization run: writes or discards the databases and refreshes the UI.
+        /// </summary>
+        /// <param name="writeFiles">Write the changed databases that are not opened in KeePass.</param>
+        /// <param name="masterSaved">The master has been saved with the changes of this run.</param>
+        private static void EndSync(bool writeFiles, bool masterSaved)
+        {
+            try
+            {
+                SaveDatabases(writeFiles, masterSaved);
             }
             catch (Exception e)
             {
@@ -104,9 +171,8 @@ namespace KeePassMasterSlaveSync
             finally
             {
                 Databases.Clear();
-                connectionInfo = null;
-                isRunning = false;
-                currentJob = "";
+                master = null;
+                syncedSave = Guid.Empty;
             }
         }
 
@@ -203,10 +269,10 @@ namespace KeePassMasterSlaveSync
         }
 
         /// <summary>
-        /// Writes each changed database once. Databases opened in KeePass are only marked as modified
-        /// and refreshed in the UI, so KeePass saves them the normal way.
+        /// Writes each changed database once. Databases opened in KeePass are not written but refreshed in
+        /// the UI and marked as modified (except the master if it has been saved with the changes).
         /// </summary>
-        private static void SaveDatabases()
+        private static void SaveDatabases(bool writeFiles, bool masterSaved)
         {
             bool updateUI = false;
 
@@ -216,14 +282,15 @@ namespace KeePassMasterSlaveSync
                 {
                     if (db.Changed)
                     {
-                        db.Database.Modified = true;
+                        if (db != master || !masterSaved)
+                            db.Database.Modified = true;
                         db.Database.UINeedsIconUpdate = true;
                         updateUI = true;
                     }
                     continue;
                 }
 
-                if (db.Changed && !db.Failed)
+                if (writeFiles && db.Changed && !db.Failed)
                 {
                     try
                     {
@@ -365,8 +432,57 @@ namespace KeePassMasterSlaveSync
 
             //Delete slave entries that match Master settings (But not in master)
             PwObjectList<PwEntry> targetList = GetMatching(targetDatabase, settings);
+
+            // Entries created in the slave are copied to the master instead (if enabled)
+            if (settings.SyncNewSlaveEntries)
+                foreach (PwEntry entry in CopyNewSlaveEntries(entries, targetList, source, target, settings))
+                    targetList.Remove(entry);
+
             if (SelectEntriesAndDelete(entries, targetList, targetDatabase))
                 target.Changed = true;
+        }
+
+        /// <summary>
+        /// Copies the entries created in the slave (target) database to the master (source) of the job. An entry
+        /// is new if the master neither contains it (anywhere) nor has deleted it.
+        /// </summary>
+        /// <param name="masterList">The entries of the master matching the job.</param>
+        /// <param name="slaveList">The entries of the slave matching the job.</param>
+        /// <returns>The new entries of the slave database.</returns>
+        private static List<PwEntry> CopyNewSlaveEntries(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList,
+            SyncDatabase source, SyncDatabase target, Settings settings)
+        {
+            PwDatabase masterDb = source.Database;
+            PwDatabase slaveDb = target.Database;
+            IEnumerable<PwUuid> masterUuid = masterList.Select(u => u.Uuid);
+
+            List<PwEntry> newEntries = slaveList.Where(e => !masterUuid.Contains(e.Uuid) &&
+                masterDb.RootGroup.FindEntry(e.Uuid, true) == null &&
+                !masterDb.DeletedObjects.Any(d => d.Uuid.Equals(e.Uuid)) &&
+                !IsInRecycleBin(e, slaveDb)).ToList();
+
+            foreach (PwEntry entry in newEntries)
+            {
+                // Get (or create) the group of the entry in the master database (including hierarchy)
+                PwGroup masterGroup = TargetGroupInDatebase(entry, source, slaveDb);
+
+                CloneEntry(slaveDb, masterDb, entry, null, masterGroup, settings);
+                source.Changed = true;
+            }
+
+            return newEntries;
+        }
+
+        private static bool IsInRecycleBin(PwEntry entry, PwDatabase db)
+        {
+            if (db.RecycleBinUuid.Equals(PwUuid.Zero))
+                return false;
+
+            for (PwGroup group = entry.ParentGroup; group != null; group = group.ParentGroup)
+                if (group.Uuid.Equals(db.RecycleBinUuid))
+                    return true;
+
+            return false;
         }
 
         private static CompositeKey CreateCompositeKey(ProtectedString password, string keyFilePath)
