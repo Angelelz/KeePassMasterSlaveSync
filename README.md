@@ -46,6 +46,7 @@ If you have more experience with KeePass plugins, I would be very grateful if yo
 - You can have a sync job on a slave database to target the Master database without setting a password or a key file, by executing from the master and setting 'MSS_IsSlave' to true in slave and 'MSS_PerformSlaveJobs' to true on the master.
 - The plugin will automatically update the UI of any opened database. Other databases opened in KeePass are changed in memory and marked as modified, save them to keep the changes. The plugin only writes slave databases that are not opened in KeePass, and only if they changed.
 - To prevent duplicated Uuids, the plugin will delete any entry from the slave DB that has been moved out of the synced group or tag.
+- Groups are matched by their Uuid. If a group was created in both databases independently, the plugin uses the existing group with the same name instead of adding a second one next to it.
 
 ![create](https://raw.githubusercontent.com/Angelelz/KeePassMasterSlaveSync/master/KeePassMasterSlaveSync/Capture/CaptureMSS.png)
 

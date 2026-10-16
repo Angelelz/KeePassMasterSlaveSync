@@ -729,6 +729,16 @@ namespace KeePassMasterSlaveSync
                 // Get the source group
                 PwGroup sourceGroup = sourceDatabase.RootGroup.FindGroup(id, true);
 
+                // Use the group with the same name if it was created in both databases (it must not be
+                // the target group of another source group), instead of adding a second one next to it
+                List<PwGroup> sameName = lastGroup.Groups.Where(g => g.Name == sourceGroup.Name &&
+                    sourceDatabase.RootGroup.FindGroup(g.Uuid, true) == null).ToList();
+                if (sameName.Count == 1)
+                {
+                    lastGroup = sameName[0];
+                    continue;
+                }
+
                 // Create a new group and asign all properties from the source group
                 newGroup = new PwGroup();
                 newGroup.AssignProperties(sourceGroup, false, true);
