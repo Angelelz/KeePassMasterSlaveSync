@@ -37,6 +37,10 @@ namespace KeePassMasterSlaveSync
 
         private void StartSync(Object sender, FileSavedEventArgs args)
         {
+            // Don't synchronize a database that could not be saved
+            if (!args.Success)
+                return;
+
             Sync.StartSync(args.Database);
         }
 

@@ -15,111 +15,105 @@ namespace KeePassMasterSlaveSync
 {
     public class Sync
     {
+        /// <summary>
+        /// A database used during one synchronization run.
+        /// </summary>
+        private class SyncDatabase
+        {
+            public PwDatabase Database;
+            // Opened in KeePass: it is changed in memory and marked as modified, never written by the plugin
+            public bool IsOpen;
+            // Changed by the synchronization
+            public bool Changed;
+            // A job targeting this database failed, so it is not written
+            public bool Failed;
+        }
+
         private static IOConnectionInfo connectionInfo = null;
-        private static CompositeKey MasterKey = null;
-        private static bool inSlave = false;
-        private static List<string> EditedDatabases = new List<string>();
-        
+        private static bool isRunning = false;
+        // All databases of the current run by full path, so each file is opened and written only once
+        private static Dictionary<string, SyncDatabase> Databases =
+            new Dictionary<string, SyncDatabase>(StringComparer.OrdinalIgnoreCase);
+
         private static string currentJob = "";
 
         public static void StartSync(PwDatabase sourceDb)
         {
-            // Update EditedDatabases
-            EditedDatabases.Add(sourceDb.IOConnectionInfo.Path);
-
-            // Get the master database path and data
-            connectionInfo = sourceDb.IOConnectionInfo;
-            MasterKey = sourceDb.MasterKey;
-
             // Get all entries out of the group "MSSyncJobs"
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
-            if (settingsGroup == null)
+            if (settingsGroup == null || isRunning)
             {
                 return;
             }
             IEnumerable<PwEntry> jobSettings = settingsGroup.Entries;
 
-            //This will be the list of the slave jobs to perform
-            List<string> slavesPaths = new List<string>();
-            List<ProtectedString> slavesPass = new List<ProtectedString>();
-            List<string> slavesKeys = new List<string>();
-            List<bool> slavesCheck = new List<bool>();
-
-            // Loop through all found entries - each one is a Sync job 
-            foreach (var settingsEntry in jobSettings)
+            isRunning = true;
+            try
             {
-                // Load settings for this job
-                var settings = Settings.Parse(settingsEntry, sourceDb);
-                currentJob = settingsEntry.Strings.GetSafe(PwDefs.TitleField).ReadString();
+                // The master has just been saved by KeePass. It is only changed in memory and marked as
+                // modified: writing it again right away can fail on network shares and lose the file.
+                connectionInfo = sourceDb.IOConnectionInfo;
+                SyncDatabase master = new SyncDatabase() { Database = sourceDb, IsOpen = true };
+                Databases[NormalizePath(connectionInfo.Path)] = master;
 
-                if (settings.IsSlave) // If this is true don't perform the job since it has to be done from the master DB
-                    continue;
+                //This will be the list of the slave jobs to perform
+                List<Settings> slaves = new List<Settings>();
 
-                if (CheckKeyFile(sourceDb, settings, settingsEntry))
-                    continue;
-
-                if (CheckTagOrGroup(settings, settingsEntry))
-                    continue;
-
-                if (CheckTargetFilePath(settings, settingsEntry, sourceDb))
-                    continue;
-
-                if (CheckPasswordOrKeyfile(settings, settingsEntry))
-                    continue;
-
-                //Prevent repeated slave databases
-                if (!slavesPaths.Contains(settings.TargetFilePath))
+                // Loop through all found entries - each one is a Sync job
+                foreach (var settingsEntry in jobSettings)
                 {
-                    slavesPaths.Add(settings.TargetFilePath);
-                    slavesPass.Add(settings.Password);
-                    slavesKeys.Add(settings.KeyFilePath);
-                    slavesCheck.Add(settings.Disabled);
+                    // Load settings for this job
+                    var settings = Settings.Parse(settingsEntry, sourceDb);
+                    currentJob = settingsEntry.Strings.GetSafe(PwDefs.TitleField).ReadString();
+
+                    if (settings.IsSlave) // If this is true don't perform the job since it has to be done from the master DB
+                        continue;
+
+                    if (CheckKeyFile(sourceDb, settings, settingsEntry))
+                        continue;
+
+                    if (CheckTagOrGroup(settings, settingsEntry))
+                        continue;
+
+                    if (CheckTargetFilePath(settings, settingsEntry, sourceDb))
+                        continue;
+
+                    if (CheckPasswordOrKeyfile(settings, settingsEntry))
+                        continue;
+
+                    // Skip disabled/expired jobs
+                    if (settings.Disabled)
+                        continue;
+
+                    // Execute the export, then remember the slave database (once) to perform its own jobs
+                    if (RunJob(master, settings) && settings.PerformSlaveJobs &&
+                        !slaves.Any(s => SamePath(s.TargetFilePath, settings.TargetFilePath)))
+                        slaves.Add(settings);
                 }
 
-                // Skip disabled/expired jobs
-                if (settings.Disabled)
-                    continue;
+                //Start Synchronization from slaves
+                foreach (Settings slave in slaves)
+                    StartSyncAgain(GetDatabase(slave.TargetFilePath, slave));
 
-                // Update Edited Databases
-                if (!EditedDatabases.Contains(settings.TargetFilePath))
-                    EditedDatabases.Add(settings.TargetFilePath);
-
-                try
-                {
-                    // Execute the export 
-                    SyncToDb(sourceDb, settings);
-                }
-                catch (Exception e)
-                {
-                    MessageService.ShowWarning("Synchronization failed:", e);
-                }
+                SaveDatabases();
             }
-
-
-            //Start Synchronization from slaves
-            for (int i = 0; i < slavesPaths.Count; ++i)
+            catch (Exception e)
             {
-                if (!slavesCheck[i])
-                {
-
-                    // Create a key for the target database
-                    CompositeKey key = CreateCompositeKey(slavesPass[i], slavesKeys[i]);
-
-                    // Create or open the target database
-                    PwDatabase pwDatabase = OpenTargetDatabase(slavesPaths[i], key);
-                    
-                    StartSyncAgain(pwDatabase);
-                }
+                MessageService.ShowWarning("Synchronization failed:", e);
             }
-            UpdateOpenedDB(sourceDb.IOConnectionInfo.Path);
-            connectionInfo = null;
-            MasterKey = null;
-            inSlave = false;
-            currentJob = "";
+            finally
+            {
+                Databases.Clear();
+                connectionInfo = null;
+                isRunning = false;
+                currentJob = "";
+            }
         }
 
-        public static void StartSyncAgain(PwDatabase sourceDb)
+        private static void StartSyncAgain(SyncDatabase source)
         {
+            PwDatabase sourceDb = source.Database;
+
             // Get all entries out of the group "MSSyncJobs". Each one is a sync job
             PwGroup settingsGroup = sourceDb.RootGroup.Groups.FirstOrDefault(g => g.Name == "MSSyncJobs");
             if (settingsGroup == null)
@@ -128,7 +122,7 @@ namespace KeePassMasterSlaveSync
             }
             IEnumerable<PwEntry> jobSettings = settingsGroup.Entries;
 
-            // Loop through all found entries - each one is a sync job 
+            // Loop through all found entries - each one is a sync job
             foreach (var settingsEntry in jobSettings)
             {
                 // Load settings for this job
@@ -142,11 +136,8 @@ namespace KeePassMasterSlaveSync
                 if (CheckTargetFilePath(settings, settingsEntry, sourceDb))
                     continue;
 
-                if (settings.TargetFilePath == connectionInfo.Path)
-                {
-                    inSlave = true;
-                }
-                else
+                // A job targeting the master needs no password or key file, the master is already open
+                if (!SamePath(settings.TargetFilePath, connectionInfo.Path))
                 {
                     if (CheckKeyFile(sourceDb, settings, settingsEntry))
                         continue;
@@ -158,49 +149,114 @@ namespace KeePassMasterSlaveSync
                 if (CheckTagOrGroup(settings, settingsEntry))
                     continue;
 
-                // Update Edited Databases
-                if (!EditedDatabases.Contains(settings.TargetFilePath))
-                    EditedDatabases.Add(settings.TargetFilePath);
-
-                try
-                {
-                    // Execute the export 
-                    SyncToDb(sourceDb, settings);
-                }
-                catch (Exception e)
-                {
-                    MessageService.ShowWarning("Synchronization failed:", e);
-                }
-                inSlave = false;
+                // Execute the export
+                RunJob(source, settings);
             }
         }
 
-        public static void UpdateOpenedDB(string pathToMaster)
+        /// <summary>
+        /// Executes a job and shows a warning if it fails.
+        /// </summary>
+        /// <returns>True if the job succeeded.</returns>
+        private static bool RunJob(SyncDatabase source, Settings settings)
         {
-            if (EditedDatabases.Count() > 1) // Not just the Master DB
+            try
             {
-                var openedDocuments = Program.MainForm.DocumentManager.Documents;
-                var openedEditedDocuments = openedDocuments.Where(d =>
-                    EditedDatabases.Contains(d.Database.IOConnectionInfo.Path)).ToList();
-                var doc = openedEditedDocuments.FirstOrDefault();
-                int n = openedEditedDocuments.Count();
-                if (n > 0)
-                    for (int i = 0; i < n; ++i)
-                        if (!Program.MainForm.IsFileLocked(doc))
-                        {
-                            openedEditedDocuments.Remove(doc);
-                            var db = doc.Database;
-                            var key = db.MasterKey;
-                            var ioc = db.IOConnectionInfo;
-                            Program.MainForm.DocumentManager.CloseDatabase(doc.Database);
-                            Program.MainForm.OpenDatabase(ioc, key, true);
-                            doc = openedEditedDocuments.FirstOrDefault();
-                        }
-                var masterDoc = Program.MainForm.DocumentManager.Documents.Where(d =>
-                    d.Database.IOConnectionInfo.Path == pathToMaster).FirstOrDefault();
-                Program.MainForm.MakeDocumentActive(masterDoc);
+                SyncToDb(source, settings);
+                return true;
             }
-            EditedDatabases.Clear();
+            catch (Exception e)
+            {
+                // Don't write a target database that may be synchronized only partially
+                SyncDatabase target;
+                if (Databases.TryGetValue(NormalizePath(settings.TargetFilePath), out target))
+                    target.Failed = true;
+
+                MessageService.ShowWarning("Synchronization failed:", e);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets a database of the current run. A database opened in KeePass is used directly, so no file
+        /// is written behind its back. Any other database is opened from its file.
+        /// </summary>
+        private static SyncDatabase GetDatabase(string filePath, Settings settings)
+        {
+            string path = NormalizePath(filePath);
+            SyncDatabase db;
+            if (Databases.TryGetValue(path, out db))
+                return db;
+
+            var document = Program.MainForm.DocumentManager.Documents.FirstOrDefault(d =>
+                d.Database.IsOpen && SamePath(d.Database.IOConnectionInfo.Path, path));
+            if (document != null)
+                db = new SyncDatabase() { Database = document.Database, IsOpen = true };
+            else
+                db = new SyncDatabase()
+                {
+                    Database = OpenTargetDatabase(filePath, CreateCompositeKey(settings.Password, settings.KeyFilePath))
+                };
+
+            Databases.Add(path, db);
+            return db;
+        }
+
+        /// <summary>
+        /// Writes each changed database once. Databases opened in KeePass are only marked as modified
+        /// and refreshed in the UI, so KeePass saves them the normal way.
+        /// </summary>
+        private static void SaveDatabases()
+        {
+            bool updateUI = false;
+
+            foreach (SyncDatabase db in Databases.Values)
+            {
+                if (db.IsOpen)
+                {
+                    if (db.Changed)
+                    {
+                        db.Database.Modified = true;
+                        db.Database.UINeedsIconUpdate = true;
+                        updateUI = true;
+                    }
+                    continue;
+                }
+
+                if (db.Changed && !db.Failed)
+                {
+                    try
+                    {
+                        db.Database.Save(new NullStatusLogger());
+                    }
+                    catch (Exception e)
+                    {
+                        MessageService.ShowWarning("Synchronization failed:", db.Database.IOConnectionInfo.Path, e);
+                    }
+                }
+                db.Database.Close();
+            }
+
+            if (updateUI)
+                Program.MainForm.UpdateUI(true, null, true, null, true, null, false);
+        }
+
+        private static bool SamePath(string path1, string path2)
+        {
+            return string.Equals(NormalizePath(path1), NormalizePath(path2), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizePath(string path)
+        {
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (Exception)
+            {
+                // Not a local path, e.g. a URL
+                return path ?? "";
+            }
         }
 
         private static Boolean CheckKeyFile(PwDatabase sourceDb, Settings settings, PwEntry settingsEntry)
@@ -288,36 +344,29 @@ namespace KeePassMasterSlaveSync
         /// <summary>
         /// Exports all entries with the given tag to a new database at the given path.
         /// </summary>
-        /// <param name="sourceDb">The source database.</param>
+        /// <param name="source">The source database.</param>
         /// <param name="settings">The settings for this job.</param>
-        private static void SyncToDb(PwDatabase sourceDb, Settings settings)
+        private static void SyncToDb(SyncDatabase source, Settings settings)
         {
-            // Create a key for the target database
-            CompositeKey key = null;
-            if (inSlave)
-                key = MasterKey;
-            else
-                key = CreateCompositeKey(settings.Password, settings.KeyFilePath);
-
-            // Create or open the target database
-            PwDatabase targetDatabase = OpenTargetDatabase(settings.TargetFilePath, key);
+            // Get the target database (the changes are written once at the end, see SaveDatabases)
+            SyncDatabase target = GetDatabase(settings.TargetFilePath, settings);
+            PwDatabase sourceDb = source.Database;
+            PwDatabase targetDatabase = target.Database;
 
             // Assign the properties of the source root group to the target root group
-            HandleCustomIcon(targetDatabase, sourceDb, sourceDb.RootGroup);
+            if (HandleCustomIcon(targetDatabase, sourceDb, sourceDb.RootGroup))
+                target.Changed = true;
 
             // Find all entries matching the tag and/or group
             PwObjectList<PwEntry> entries = GetMatching(sourceDb, settings);
 
             // Copy all entries to the new database
-            CopyEntriesAndGroups(sourceDb, settings, entries, targetDatabase);
+            CopyEntriesAndGroups(source, settings, entries, target);
 
             //Delete slave entries that match Master settings (But not in master)
             PwObjectList<PwEntry> targetList = GetMatching(targetDatabase, settings);
-            SelectEntriesAndDelete(entries, targetList, targetDatabase);
-
-            // Save all changes to the DB
-            sourceDb.Save(new NullStatusLogger());
-            targetDatabase.Save(new NullStatusLogger());
+            if (SelectEntriesAndDelete(entries, targetList, targetDatabase))
+                target.Changed = true;
         }
 
         private static CompositeKey CreateCompositeKey(ProtectedString password, string keyFilePath)
@@ -360,13 +409,14 @@ namespace KeePassMasterSlaveSync
         /// <param name="targetDatabase">The target database where to add the icons.</param>
         /// <param name="sourceDatabase">The source database where to get the icons from.</param>
         /// <param name="sourceGroup">The source group which icon should be copied (if it is custom).</param>
-        private static void HandleCustomIcon(PwDatabase targetDatabase, PwDatabase sourceDatabase, PwGroup sourceGroup)
+        /// <returns>True if the icon was added to the target database.</returns>
+        private static bool HandleCustomIcon(PwDatabase targetDatabase, PwDatabase sourceDatabase, PwGroup sourceGroup)
         {
             // Does the group not use a custom icon or is it already in the target database
             if (sourceGroup.CustomIconUuid.Equals(PwUuid.Zero) ||
                 targetDatabase.GetCustomIconIndex(sourceGroup.CustomIconUuid) != -1)
             {
-                return;
+                return false;
             }
 
             // Check if the custom icon really is in the source database
@@ -382,6 +432,7 @@ namespace KeePassMasterSlaveSync
 
             // Copy the custom icon to the target database
             targetDatabase.CustomIcons.Add(customIcon);
+            return true;
         }
 
         /// <summary>
@@ -390,13 +441,14 @@ namespace KeePassMasterSlaveSync
         /// <param name="targetDatabase">The target database where to add the icons.</param>
         /// <param name="sourceDb">The source database where to get the icons from.</param>
         /// <param name="entry">The entry which icon should be copied (if it is custom).</param>
-        private static void HandleCustomIcon(PwDatabase targetDatabase, PwDatabase sourceDb, PwEntry entry)
+        /// <returns>True if the icon was added to the target database.</returns>
+        private static bool HandleCustomIcon(PwDatabase targetDatabase, PwDatabase sourceDb, PwEntry entry)
         {
             // Does the entry not use a custom icon or is it already in the target database
             if (entry.CustomIconUuid.Equals(PwUuid.Zero) ||
                 targetDatabase.GetCustomIconIndex(entry.CustomIconUuid) != -1)
             {
-                return;
+                return false;
             }
 
             // Check if the custom icon really is in the source database
@@ -412,6 +464,7 @@ namespace KeePassMasterSlaveSync
 
             // Copy the custom icon to the target database
             targetDatabase.CustomIcons.Add(customIcon);
+            return true;
         }
 
         private static PwObjectList<PwEntry> GetMatching(PwDatabase sourceDb, Settings settings)
@@ -485,29 +538,37 @@ namespace KeePassMasterSlaveSync
             return entries;
         }
 
-        private static void CopyEntriesAndGroups(PwDatabase sourceDb, Settings settings, PwObjectList<PwEntry> entries,
-            PwDatabase targetDatabase)
+        private static void CopyEntriesAndGroups(SyncDatabase source, Settings settings, PwObjectList<PwEntry> entries,
+            SyncDatabase target)
         {
+            PwDatabase sourceDb = source.Database;
+            PwDatabase targetDatabase = target.Database;
+
             foreach (PwEntry entry in entries)
             {
                 // Get (or create in case its the first sync) the target group in the target database (including hierarchy)
-                PwGroup targetGroup = TargetGroupInDatebase(entry, targetDatabase, sourceDb);
+                PwGroup targetGroup = TargetGroupInDatebase(entry, target, sourceDb);
 
                 PwEntry peNew = targetGroup.FindEntry(entry.Uuid, bSearchRecursive: false);
 
                 // Check if the target entry is newer than the source entry  && peNew.LastModificationTime > entry.LastModificationTime
                 if (peNew != null && peNew.LastModificationTime.CompareTo(entry.LastModificationTime) > 0)
                 {
-                    CloneEntry(targetDatabase, sourceDb, peNew, entry, targetGroup, settings);
+                    if (CloneEntry(targetDatabase, sourceDb, peNew, entry, targetGroup, settings))
+                        source.Changed = true;
                     continue;
                 }
 
                 // Handle Duplicates entries' Uuids
                 PwEntry duplicatedEntry = targetDatabase.RootGroup.FindEntry(entry.Uuid, true);
                 if (duplicatedEntry != null && duplicatedEntry.ParentGroup.Uuid.ToHexString() != targetGroup.Uuid.ToHexString())
+                {
                     DeleteEntry(duplicatedEntry, targetDatabase);
+                    target.Changed = true;
+                }
 
-                CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings);
+                if (CloneEntry(sourceDb, targetDatabase, entry, peNew, targetGroup, settings))
+                    target.Changed = true;
             }
         }
 
@@ -515,11 +576,13 @@ namespace KeePassMasterSlaveSync
         /// Get or create the target group of an entry in the target database (including hierarchy).
         /// </summary>
         /// <param name="entry">An entry wich is located in the folder with the target structure.</param>
-        /// <param name="targetDatabase">The target database in which the folder structure should be created.</param>
+        /// <param name="target">The target database in which the folder structure should be created.</param>
         /// <param name="sourceDatabase">The source database from which the folder properties should be taken.</param>
         /// <returns>The target folder in the target database.</returns>
-        private static PwGroup TargetGroupInDatebase(PwEntry entry, PwDatabase targetDatabase, PwDatabase sourceDatabase)
+        private static PwGroup TargetGroupInDatebase(PwEntry entry, SyncDatabase target, PwDatabase sourceDatabase)
         {
+            PwDatabase targetDatabase = target.Database;
+
             // Collect all group names from the entry up to the root group
             PwGroup group = entry.ParentGroup;
             List<PwUuid> list = new List<PwUuid>();
@@ -557,6 +620,7 @@ namespace KeePassMasterSlaveSync
 
                 // Add the new group at the right position in the target database
                 lastGroup.AddGroup(newGroup, true);
+                target.Changed = true;
 
                 lastGroup = newGroup;
             }
@@ -565,9 +629,12 @@ namespace KeePassMasterSlaveSync
             return lastGroup;
         }
 
-        private static void CloneEntry(PwDatabase sourceDb, PwDatabase targetDb, PwEntry sourceEntry,
+        /// <returns>True if the target entry was changed.</returns>
+        private static bool CloneEntry(PwDatabase sourceDb, PwDatabase targetDb, PwEntry sourceEntry,
             PwEntry targetEntry, PwGroup targetGroup, Settings settings)
         {
+            bool changed = false;
+
             // Was no existing entry in the target database found?
             if (targetEntry == null)
             {
@@ -581,12 +648,18 @@ namespace KeePassMasterSlaveSync
 
                 // Add entry to the target group in the new database
                 targetGroup.AddEntry(targetEntry, true);
+                changed = true;
             }
 
             // Clone entry properties if ExportUserAndPassOnly is false
+            // (entries with the same modification time are already synchronized)
             if (!settings.ExportUserAndPassOnly)
             {
-                targetEntry.AssignProperties(sourceEntry, false, true, true);
+                if (changed || targetEntry.LastModificationTime != sourceEntry.LastModificationTime)
+                {
+                    targetEntry.AssignProperties(sourceEntry, false, true, true);
+                    changed = true;
+                }
             }
             else
             {
@@ -600,19 +673,31 @@ namespace KeePassMasterSlaveSync
                 PwDefs.PasswordField, PwDefs.UrlField };
 
             foreach (string fieldName in fieldNames)
-                targetEntry.Strings.Set(fieldName, Settings.GetFieldWRef(sourceEntry, sourceDb, fieldName));
+            {
+                ProtectedString value = Settings.GetFieldWRef(sourceEntry, sourceDb, fieldName);
+                if (changed || targetEntry.Strings.ReadSafe(fieldName) != value.ReadString())
+                {
+                    targetEntry.Strings.Set(fieldName, value);
+                    changed = true;
+                }
+            }
 
             // Handle custom icon
-            HandleCustomIcon(targetDb, sourceDb, sourceEntry);
+            if (HandleCustomIcon(targetDb, sourceDb, sourceEntry))
+                changed = true;
+
+            return changed;
         }
 
-        private static void SelectEntriesAndDelete(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList, PwDatabase targetDb)
+        /// <returns>True if entries were deleted.</returns>
+        private static bool SelectEntriesAndDelete(PwObjectList<PwEntry> masterList, PwObjectList<PwEntry> slaveList, PwDatabase targetDb)
         {
             //Find entries in slaveList not in masterList to delete
             IEnumerable<PwUuid> masterUuid = masterList.Select(u => u.Uuid);
             var toDelete = slaveList.Where(e => !masterUuid.Contains(e.Uuid)).ToList();
 
             DeleteEntries(toDelete, targetDb);
+            return toDelete.Count > 0;
         }
 
         private static void DeleteEntries(List<PwEntry> entriesToDelete, PwDatabase dB)
