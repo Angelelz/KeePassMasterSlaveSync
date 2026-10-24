@@ -23,7 +23,8 @@ namespace KeePassMasterSlaveSync
         {
             if (host == null) return false;
             m_host = host;
-            m_host.MainWindow.FileSaved += StartSync;
+            m_host.MainWindow.FileSaving += SyncBeforeSave;
+            m_host.MainWindow.FileSaved += SyncAfterSave;
             return true;
         }
 
@@ -31,13 +32,19 @@ namespace KeePassMasterSlaveSync
         {
             if (m_host != null)
             {
-                m_host.MainWindow.FileSaved -= StartSync;
+                m_host.MainWindow.FileSaving -= SyncBeforeSave;
+                m_host.MainWindow.FileSaved -= SyncAfterSave;
             }
         }
 
-        private void StartSync(Object sender, FileSavedEventArgs args)
+        private void SyncBeforeSave(Object sender, FileSavingEventArgs args)
         {
-            Sync.StartSync(args.Database);
+            Sync.SyncBeforeSave(args.Database, args.EventGuid, args.Copy);
+        }
+
+        private void SyncAfterSave(Object sender, FileSavedEventArgs args)
+        {
+            Sync.SyncAfterSave(args.Database, args.EventGuid, args.Success);
         }
 
     }

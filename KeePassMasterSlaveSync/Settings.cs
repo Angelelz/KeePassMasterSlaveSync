@@ -45,6 +45,10 @@ namespace KeePassMasterSlaveSync
         /// If true, this job will be ignored when not executed from a Master database.
         /// </summary>
         public bool IsSlave { get; private set; }
+        /// <summary>
+        /// If true, entries created in the target database are copied to the source database instead of being deleted.
+        /// </summary>
+        public bool SyncNewSlaveEntries { get; private set; }
 
         // Private constructor
         private Settings()
@@ -70,7 +74,8 @@ namespace KeePassMasterSlaveSync
                 Disabled = (settingsEntry.Expires),
                 ExportUserAndPassOnly = settingsEntry.Strings.ReadSafe("MSS_ExportUserAndPassOnly").ToLower().Trim() == "true",
                 PerformSlaveJobs = settingsEntry.Strings.ReadSafe("MSS_PerformSlaveJobs").ToLower().Trim() != "false",
-                IsSlave = settingsEntry.Strings.ReadSafe("MSS_IsSlave").ToLower().Trim() == "true"
+                IsSlave = settingsEntry.Strings.ReadSafe("MSS_IsSlave").ToLower().Trim() == "true",
+                SyncNewSlaveEntries = settingsEntry.Strings.ReadSafe("MSS_SyncNewSlaveEntries").ToLower().Trim() == "true"
             };
         }
 
