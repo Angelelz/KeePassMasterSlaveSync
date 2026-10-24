@@ -6,6 +6,14 @@
 KeePassMasterSlaveSync is a KeePass 2 plugin that Allows synchronization of specific Groups or Tags between local databases.
 This plugin is heavily based on [KeePassSubsetExport.](https://github.com/lukeIam/KeePassSubsetExport)
 
+## Maintenance status — maintainer wanted
+
+This plugin is currently unmaintained. I no longer use KeePass or have a Windows computer to test it, so I cannot promise fixes, releases, or compatibility with current KeePass versions.
+
+I'm looking for a community maintainer who actively uses KeePass and can help review contributions, test synchronization behavior on Windows, and maintain releases. If you're interested, please join the [maintainer discussion on PR #25](https://github.com/Angelelz/KeePassMasterSlaveSync/pull/25#issuecomment-6385865903). Helping with testing or individual fixes is welcome too.
+
+**There are unresolved reports of unexpected entry deletion, including [issue #16](https://github.com/Angelelz/KeePassMasterSlaveSync/issues/16). Keep separate backups of all databases and test synchronization with disposable copies before using the plugin with important data.**
+
 ## Why?
 Automatically and securely share entries and groups with other databases. I have my personal database from which I share a group containing bank and family entries with my wife's database.
 My Database act as a Master for those entries: If I delete or move any entry, It will be deleted from the Slave; but if there is different data in any entry, the one with the newer modification time will be synced across both databases.
